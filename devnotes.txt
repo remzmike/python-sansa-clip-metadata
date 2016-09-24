@@ -1,0 +1,20 @@
+01 - nothin
+02 - unplugged, myserty re-index, plugged in
+03 - rated 5 stars on bonobo song "animals"
+found the ratings, 11th element in 0x80 groupings, first byte 0x05
+that matches with 11th tracks in index
+
+04 - different week, different music, after unplug from work machine it did a mystery reindex
+05 - plugged in after #4 mystery re-index, unplugging there also gave a mystery re-index, weird.
+06 - plugged in again after #5 mystery re-index, unplugging also gave another re-index
+07 - deleted so thoed single from #6
+08 - in #7 i notice the song is still there but it's a value changed from 02 to 00, i dunno if my code will parse that correctly
+so i am plugging it in after #7's re-index to see how 8 compares, thinking maybe the data will be gone from there now for real
+i think some of those initial bytes being set to 0xffffffff says reindex or something (3rd set of 4 bytes)
+ok so, the index is removed after re-index
+the metadata is updated immediately
+and now parse supports detection of pending deletes
+also file size doesn't change and meta index seems to stay the same
+
+09 - lookin for unicode file
+10 - added first track of tree's album to golist to detect change
