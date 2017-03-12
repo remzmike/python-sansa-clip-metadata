@@ -1,7 +1,7 @@
 # eg. D:\Code.Github\python-sansa-clip-metadata>c:\python\python massparse.py C:\sansa.clipplus\
 from __future__ import division
 
-import os, sys
+import os, sys, codecs
 
 import sansa
 from sansa import mkascii
@@ -18,6 +18,7 @@ def go(dpath):
                         key = '{artist}\\{album}\\{title}'.format(**item.__dict__)
                         songs.setdefault(key, [])
                         songs[key].append(item.rating)
+            #break # for debug
     return songs
 
 if __name__=='__main__':
@@ -25,9 +26,12 @@ if __name__=='__main__':
 
     songs = go(dpath)
 
-    f = file('_output_.txt', 'wb')
+    # love this unicode stuff, too much fun, no problems, would unicode again 10/10
+    #f = codecs.open('_output_.txt', 'wb', 'utf-8-sig')
+    f = open('_output_.txt', 'wb')
     for key, ratings in songs.items():
-        f.write(key)
         avg = sum(ratings)/len(ratings)
-        f.write('{} {{{}}}\n'.format(key, avg))
+        line = '{} {{{}}}\n'.format(key, avg)
+        #f.write(line.encode('utf8'))
+        f.write(line)
     f.close()
