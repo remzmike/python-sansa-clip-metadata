@@ -1,3 +1,6 @@
+# future: unicode hammer, latscii, custom
+import sys, gzip
+
 enable_debug = False
 def debug(*args):
     if enable_debug:
@@ -41,26 +44,27 @@ class SansaData:
         o.i = 0
         o.data = data
         o.resdata = resdata
+        o.mode = mode
         o.bytes = data
         o.items = []
         o.items_pending_delete = []
         o.items_invalid_b = []
 
     def goto_items(o):
-        if mode=='clip':
+        if o.mode=='clip':
             o.i = 0x27
-        elif mode=='clipplus':
+        elif o.mode=='clipplus':
             o.i = 0x23
-        elif mode=='clipzip':
+        elif o.mode=='clipzip':
             o.i = 0x2f
 
     def goto_metas(o):
-        if mode=='clip':
+        if o.mode=='clip':
             o.i = 0x148238
-        elif mode in ['clipplus','clipzip']:
+        elif o.mode in ['clipplus','clipzip']:
             # separate file now
-            o.bytes = resdata
-            o.i = 0x77d                 
+            o.bytes = o.resdata
+            o.i = 0x77d
 
     def read_all(o):
         o.read_items()
@@ -96,16 +100,16 @@ class SansaData:
 
     # returns Item
     def read_item(o):
-        
+
         a = ord(o.read(1))
         debug('a', a) # appears to tell if item data is going to use unicode (2) or not (1)
         if a==0: # also changes to 0 when a track is pending delete
             debug('this track marked for deletion')
-        
+
         b = ord(o.read(1)) # item type
         debug('b', b)
-        
-        if mode in ['clip','clipplus']:
+
+        if o.mode in ['clip','clipplus']:
             o.read(15)
         else:
             o.read(7)
@@ -115,26 +119,27 @@ class SansaData:
 
         marker = 'mmc:0:'
         if not pathname.startswith(marker):
-            raise Exception('expected marker prefix "{0}", got "{1}", @ {2}'.format(marker, pathname, hex(o.i)))
-        
+            msg = 'expected marker prefix "{0}", got "{1}", @ {2}'.format(marker, pathname, hex(o.i))
+            raise Exception(msg)
+
         filename = o.read_string()
         debug('filename', filename)
-        
+
         title = o.read_string()
         debug( 'title', title)
-        
+
         artist = o.read_string()
         debug('artist', artist)
-        
+
         album = o.read_string()
         debug('album', album)
 
         f1 = o.read(1)
         debug('f1', ord(f1))
-        
+
         f2 = o.read(1)
         debug('f2', ord(f2))
-        
+
         # this appears in my ogg files
         extra = None
         if not (ord(f1)==255 and ord(f2)==255):
@@ -142,10 +147,10 @@ class SansaData:
         extra = o.read_string()
         if len(extra)>0:
             debug('*extra', extra)
-        
+
         genre = o.read_string()
         debug('genre', genre)
-        
+
         end1 = o.read(2)
         if end1[1] == '\x00': # hax
             end2 = o.read(5)
@@ -223,22 +228,58 @@ class SansaData:
                 print ' ', item.artist, '-', item.album, '-', item.filename
             metacount += 1
 
-if __name__ == '__main__':
-    
-    # future: unicode hammer, latscii, custom    
-    import sys        
-    
-    # make ascii from double byte string
-    def mkascii(bs):
-        u = bs.decode('utf16')
-        a = u.encode('ascii', 'replace')
-        #a = u.encode('ascii', 'xmlcharrefreplace')
-        #a = u.encode('ascii', 'backslashreplace')
-        return a
+# ----------------------------------------
 
-    # do nothing to byte string
-    def nothing(bs):
-        return bs
+# make ascii from double byte string
+def mkascii(bs):
+    u = bs.decode('utf16')
+    a = u.encode('ascii', 'replace')
+    #a = u.encode('ascii', 'xmlcharrefreplace')
+    #a = u.encode('ascii', 'backslashreplace')
+    return a
+
+# do nothing to byte string
+def nothing(bs):
+    return bs
+
+def get_rated_songs(fn, mode=None):
+    debug('* {} * {} *'.format(fn, mode))
+    modes = ['clip','clipplus','clipzip']
+
+    if '\\sansa.clip\\' in fn:
+        mode = modes[0]
+    elif '\\sansa.clipplus\\' in fn:
+        mode = modes[1]
+    elif '\\sansa.clipzip\\' in fn:
+        mode = modes[2]
+    elif mode == None:
+        raise Exception('cannot determine mode')
+
+    debug('* mode updated:', mode)
+    assert mode in modes
+
+    resfn = fn.replace('MTABLE', 'RES_INFO')
+    resdata = None
+    if fn.lower().endswith('.gz'):
+        data = gzip.open(fn,'rb').read()
+        if mode != 'clip':
+            resdata = gzip.open(resfn,'rb').read()
+    else:
+        data = file(fn,'rb').read()
+        if mode != 'clip':
+            resdata = file(resfn,'rb').read()
+    mt = SansaData(data, resdata, mode)
+    mt.read_all()
+
+    rated_items = []
+
+    for item in mt.items:
+        if item.rating > 0:
+            rated_items.append(item)
+
+    return rated_items
+
+if __name__ == '__main__':
 
     test = True
     if test:
@@ -254,52 +295,27 @@ if __name__ == '__main__':
     if len(sys.argv)==1:
         print 'first param should be path to an mtable.sys file'
         sys.exit(1)
-    fn = sys.argv[1] 
-        
-    modes = ['clip','clipplus','clipzip']
-    
-    if '\\sansa.clip\\' in fn:
-        mode = modes[0]
-    elif '\\sansa.clipplus\\' in fn:
-        mode = modes[1]
-    elif '\\sansa.clipzip\\' in fn:
-        mode = modes[2]
-    else:
-        if len(sys.argv)<3:
-            print 'second param should be mode string'
-            sys.exit(2)
+
+    fn = sys.argv[1]
+
+    mode = None
+    if len(sys.argv)==3:
         mode = sys.argv[2]
-    print 'mode:', mode
-    assert mode in modes
-      
+
+    rated_songs = get_rated_songs(fn, mode)
     #fn = '7/MTABLE.SYS' # has a pending delete
     #fn = '8/MTABLE.SYS'
     #fn = '9/MTABLE.SYS' # unicode on track 640 title
     #fn = '10/MTABLE.SYS' # looks like golist is stored in unparsed section
 
-    resfn = fn.replace('MTABLE', 'RES_INFO')
-    resdata = None
-    if fn.lower().endswith('.gz'):
-        import gzip
-        data = gzip.open(fn,'rb').read()        
-        if mode != 'clip':
-            resdata = gzip.open(resfn,'rb').read()
-    else:
-        data = file(fn,'rb').read()
-        if mode != 'clip':            
-            resdata = file(resfn,'rb').read()
-    mt = SansaData(data, resdata, mode)
-    mt.read_all()
-
     if True:
-        for item in mt.items:
-            if item.rating > 0:
-                if item.uses_unicode():
-                    fn = mkascii
-                else:
-                    fn = nothing
-                print item.rating, '-', fn(item.artist), '-', fn(item.album), '-', fn(item.title), '-', item.filename
-    
+        for item in rated_songs:
+            if item.uses_unicode():
+                fun = mkascii
+            else:
+                fun = nothing
+            print item.rating, '-', fun(item.artist), '-', fun(item.album), '-', fun(item.title), '-', item.filename
+
     # track 640 in data 9 contains unicode filename, treekeeper
     if False:
         if fn == '9/MTABLE.SYS':
